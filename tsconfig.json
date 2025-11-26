@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2017",
+    "lib": ["ES2017", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "strict": false,
+    "declaration": false,
+    "sourceMap": false,
+    "outDir": "./wwwroot/js",
+    "removeComments": true,
+    "preserveConstEnums": true
+  },
+  "include": [
+    "App_Plugins/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "wwwroot",
+    "bin",
+    "obj"
+  ]
+}

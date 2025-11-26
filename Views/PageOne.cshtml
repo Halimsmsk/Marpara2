@@ -1,0 +1,23 @@
+﻿@using Umbraco.Cms.Web.Common.PublishedModels;
+@using Umbraco.Cms.Core.Models.PublishedContent;
+@inherits Umbraco.Cms.Web.Common.Views.UmbracoViewPage
+@{
+    Layout = null;
+    
+    // Query string'den culture al, yoksa varsayılan culture kullan
+    var requestedCulture = Context.Request.Query["culture"].ToString();
+    
+    // Eğer query string'de culture varsa onu kullan, yoksa content'in varsayılan culture'ını al
+    var culture = !string.IsNullOrEmpty(requestedCulture) 
+        ? requestedCulture 
+        : (Umbraco.AssignedContentItem.Cultures.Keys.FirstOrDefault() ?? "tr-TR");
+    
+    // Culture'a göre sadece path'i al (domain olmadan)
+    var urlPath = Umbraco.AssignedContentItem.Url(culture, mode: UrlMode.Relative);
+    
+    // Sabit domain kullan
+    var baseUrl = "https://testalpha.morpara.com";
+    var fullUrl = baseUrl + urlPath;
+}
+<h1 style="text-align: center; position: fixed;">Önizleme Sayfası Gösterilen: @fullUrl (Dil: @culture)</h1>
+<iframe src="@(fullUrl)?preview" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>
