@@ -1795,6 +1795,17 @@ namespace Morpara.Services
                         result["conditions"] = conditions;
                         _logger.LogInformation("[DEBUG Campaign] ✅ Added conditions after shortDescription: {Conditions}", conditions);
                     }
+                    
+                    // ⚡ Related campaigns ekle
+                    if (finalContentId != null)
+                    {
+                        var relatedCampaignsData = _campaignService.GetRelatedCampaigns(finalContentId.ToString()!, maxItems: 3);
+                        if (relatedCampaignsData != null)
+                        {
+                            result["relatedCampaigns"] = relatedCampaignsData;
+                            _logger.LogInformation("[DEBUG Campaign] ✅ Added relatedCampaigns for contentId: {ContentId}", finalContentId);
+                        }
+                    }
                 }
             }
 
@@ -1974,8 +1985,20 @@ namespace Morpara.Services
                 
                 if (value != null)
                 {
+                    // Link için özel mapping
+                    if (value is Link link)
+                    {
+                        result[property.Alias] = new
+                        {
+                            name = link.Name,
+                            target = link.Target,
+                            type = link.Type.ToString(),
+                            udi = link.Udi?.ToString(),
+                            url = link.Url
+                        };
+                    }
                     // MediaWithCrops için URL döndür
-                    if (value is MediaWithCrops mediaWithCrops)
+                    else if (value is MediaWithCrops mediaWithCrops)
                     {
                         result[property.Alias] = mediaWithCrops.MediaUrl();
                     }

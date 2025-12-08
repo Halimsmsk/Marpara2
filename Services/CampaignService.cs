@@ -306,6 +306,11 @@ namespace Morpara.Services
             if (campaignsParent == null)
                 return new { contentType = "relatedCampaigns", campaigns = new List<object>() };
 
+            // Get relatedCampaignsTitle from parent's home block grid (campingList block)
+            var parentHomeBlockGrid = campaignsParent.Value<BlockGridModel>("home");
+            var campingListBlock = parentHomeBlockGrid?.FirstOrDefault(b => b.Content?.ContentType?.Alias == "campingList");
+            var relatedCampaignsTitle = campingListBlock?.Content?.Value<string>("relatedCampaignsTitle") ?? string.Empty;
+            var detailButtonText = campingListBlock?.Content?.Value<string>("detailButtonText") ?? string.Empty;
             var now = DateTime.Now.Date;
 
             // Get all campaign siblings, excluding the current campaign
@@ -326,16 +331,18 @@ namespace Morpara.Services
                 .Where(item => item.CampaignBlock != null)
                 .Where(item =>
                 {
-                    // Check active status first
+                    // Check active status - if active field exists, respect it
                     var active = item.CampaignBlock.Content.Value<bool?>("active");
-                    if (!active.GetValueOrDefault(false))
+                    
+                    // Only exclude if explicitly set to false
+                    // If active is null or true, include the campaign
+                    if (active.HasValue && !active.Value)
                         return false;
 
-                    // UPDATED LOGIC: Show both current AND future campaigns
-                    var expireDate = item.CampaignBlock.Content.Value<DateTime?>("expireDate")?.Date;
-                    
-                    // Include campaign if it's not yet expired (current OR future campaigns)
-                    return expireDate.HasValue && expireDate.Value >= now;
+                    // UPDATED LOGIC: Show both current AND future campaigns, AND past campaigns
+                    // Don't filter by expireDate - we'll sort by relevance instead
+                    // This ensures we get at least 3 campaigns even if categories don't match
+                    return true;
                 })
                 .Select(item => new
                 {
@@ -344,6 +351,7 @@ namespace Morpara.Services
                     Categories = item.CampaignBlock.Content.Value<IEnumerable<IPublishedContent>>("categories")?
                         .Select(c => c.Name)
                         .ToList() ?? new List<string>(),
+
                     Title = item.CampaignBlock.Content.Value<string>("title") ?? item.Content.Name,
                     ShortDescription = item.CampaignBlock.Content.Value<string>("shortDescription"),
                     Image = item.CampaignBlock.Content.Value<IPublishedContent>("image"),
@@ -371,10 +379,9 @@ namespace Morpara.Services
                     item.DateScore,
                     TotalScore = item.CategoryScore * 10 + item.DateScore // Category weight is higher
                 })
-                .Where(item => item.CategoryScore > 0 || currentCampaignCategories.Count == 0 || relatedCampaigns.Count <= maxItems)
                 .OrderByDescending(item => item.TotalScore) // Sort by total relevance score
                 .ThenByDescending(item => item.Campaign.StartingDate ?? DateTime.MinValue) // Then by start date
-                .Take(maxItems)
+                .Take(maxItems) // Always take maxItems campaigns regardless of category match
                 .Select(item => new
                 {
                     title = item.Campaign.Title,
@@ -394,6 +401,8 @@ namespace Morpara.Services
             return new
             {
                 contentType = "relatedCampaigns",
+                title = relatedCampaignsTitle,
+                detailButtonText = detailButtonText,
                 content = new
                 {
                     contentTypeAlias = "relatedCampaigns",

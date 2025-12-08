@@ -22,7 +22,7 @@ namespace Morpara.Services
             _variation = variation;
         }
 
-        public Dictionary<string, object> GetAlternativeCulturesById(int contentId)
+        public Dictionary<string, object> GetAlternativeCulturesById(int contentId, int? categoryId = null)
         {
             var result = new Dictionary<string, object>();
             if (!_ctxAccessor.TryGetUmbracoContext(out var ctx))
@@ -116,6 +116,21 @@ namespace Morpara.Services
 
                 if (cultureContent != null)
                 {
+                    // Eğer category varsa culture'a göre URL'sini ekle
+                    if (categoryId.HasValue && !string.IsNullOrEmpty(finalUrl) && finalUrl != "#")
+                    {
+                        var categoryContent = ctx.Content?.GetById(categoryId.Value);
+                        if (categoryContent != null)
+                        {
+                            // Her culture için category'nin kendi UrlSegment'ini al
+                            var categoryUrlSegment = categoryContent.UrlSegment(isoCode) ?? categoryContent.Name(isoCode);
+                            if (!string.IsNullOrEmpty(categoryUrlSegment))
+                            {
+                                finalUrl = finalUrl.TrimEnd('/') + "/" + categoryUrlSegment + "/";
+                            }
+                        }
+                    }
+                    
                     result[isoCode] = new
                     {
                         path = !string.IsNullOrEmpty(finalUrl) && finalUrl != "#" ? finalUrl : null

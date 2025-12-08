@@ -10,6 +10,10 @@
   <ItemGroup>
     <Compile Remove="Controllers\ContentApiControllerRefactored.cs" />
     
+    <!-- 🚫 Temporarily disable BlockFilter-dependent files -->
+    <Compile Remove="Composers\BlockGridValidationComposer.cs" />
+    <Compile Remove="Notifications\BlockFilterNotificationHandler.cs" />
+    
     <!-- 🚫 Exclude libs folder completely to prevent path length issues -->
     <Compile Remove="libs\**\*.cs" />
     <Content Remove="libs\**\*" />
@@ -28,7 +32,8 @@
   <ItemGroup>
     <!-- ✨ Local Project Reference - Kraftvaerk Block Filter Backend -->
     <PackageReference Include="Cultiv.Hangfire" Version="4.1.3" />
-    <ProjectReference Include="libs\kraftvaerk.umbraco.blockfilter-main\kraftvaerk.umbraco.blockfilter.Backend\kraftvaerk.umbraco.blockfilter.Backend.csproj" />
+    <!-- 🚫 Temporarily disabled - project file not found -->
+    <!-- <ProjectReference Include="libs\kraftvaerk.umbraco.blockfilter-main\kraftvaerk.umbraco.blockfilter.Backend\kraftvaerk.umbraco.blockfilter.Backend.csproj" /> -->
     
     <PackageReference Include="Microsoft.TypeScript.MSBuild" Version="5.9.3">
       <PrivateAssets>all</PrivateAssets>

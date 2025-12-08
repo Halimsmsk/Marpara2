@@ -493,6 +493,14 @@ namespace Morpara.Controllers
 
                 // Kategori bilgisini al
                 var categoryInfo = _categoryService.GetCategoryInfo(content, categoryName);
+                
+                // Category ID'yi categoryName'den hesapla (alternative cultures için)
+                int? categoryId = null;
+                if (!string.IsNullOrEmpty(categoryName) && categoryInfo != null)
+                {
+                    // categoryInfo'dan ID al veya categoryName ile arama yap
+                    categoryId = ExtractCategoryIdFromBlockGrid(content);
+                }
 
                 // Handle category content type
                 if (content.ContentType.Alias == "category")
@@ -530,7 +538,7 @@ namespace Morpara.Controllers
                     Category = categoryInfo,
                     ParentUrl = content.Parent()?.Url(activeCulture),
                     FilterParams = filterParams,
-                    AlternativeCultures = _cultureService.GetAlternativeCulturesById(content.Id),
+                    AlternativeCultures = _cultureService.GetAlternativeCulturesById(content.Id, categoryId),
                     Properties = content.Properties.ToDictionary(
                         p => p.Alias,
                         p => _propertyMappingService.MapValue(p, content.Id, content.Key, filterParams, url, categoryName))
@@ -700,15 +708,21 @@ namespace Morpara.Controllers
                         continue;
 
                     // Kategori bilgisini block grid'den çıkar
-                    string? categoryName = null;
+                    int? categoryId = null;
+                    string? categoryUrlSegment = null;
                     if (HasQuestionsContent(content))
                     {
-                        categoryName = ExtractCategoryFromBlockGrid(content);
+                        categoryId = ExtractCategoryIdFromBlockGrid(content);
                         
                         // Kategori bulunduysa URL'yi yeniden oluştur
-                        if (!string.IsNullOrEmpty(categoryName))
+                        if (categoryId.HasValue)
                         {
-                            contentUrl = BuildUrlWithCategory(content, categoryName, culture);
+                            var categoryContent = _umbracoContextAccessor.GetRequiredUmbracoContext().Content?.GetById(categoryId.Value);
+                            if (categoryContent != null)
+                            {
+                                categoryUrlSegment = categoryContent.UrlSegment(culture) ?? categoryContent.Name(culture);
+                                contentUrl = BuildUrlWithCategory(content, categoryUrlSegment, culture);
+                            }
                         }
                         else
                         {
@@ -736,13 +750,13 @@ namespace Morpara.Controllers
                         lastModified = content.UpdateDate.ToString("yyyy-MM-ddTHH:mm:sszzz"),
                         changeFrequency = changeFreq,
                         priority = (double?)null, // Varsayılan olarak null
-                        category = categoryName // Kategori bilgisini ekle
+                        category = categoryUrlSegment // Kategori bilgisini ekle
                     };
                     
                     sitemapEntries.Add(entry);
                     
                     _logger.LogInformation("[DEBUG ContentApiController SitemapJson] Added entry: {Url}, Category: {Category}", 
-                        fullUrl, categoryName ?? "none");
+                        fullUrl, categoryUrlSegment ?? "none");
                 }
 
                 // Cache'e kaydet
@@ -790,17 +804,23 @@ namespace Morpara.Controllers
                 }
 
                 // Kategori bilgisini block grid'den çıkar
-                string? categoryName = null;
+                int? categoryId = null;
+                string? categoryUrlSegment = null;
                 if (HasQuestionsContent(content))
                 {
-                    categoryName = ExtractCategoryFromBlockGrid(content);
+                    categoryId = ExtractCategoryIdFromBlockGrid(content);
                     
                     // Kategori bulunduysa URL'yi yeniden oluştur
-                    if (!string.IsNullOrEmpty(categoryName))
+                    if (categoryId.HasValue)
                     {
-                        contentUrl = BuildUrlWithCategory(content, categoryName, defaultCulture);
-                        _logger.LogInformation("[DEBUG AddUrl] FAQ page with category: {PageName} (ID: {PageId}), Category: {Category}, URL: {Url}", 
-                            content.Name, content.Id, categoryName, contentUrl);
+                        var categoryContent = _umbracoContextAccessor.GetRequiredUmbracoContext().Content?.GetById(categoryId.Value);
+                        if (categoryContent != null)
+                        {
+                            categoryUrlSegment = categoryContent.UrlSegment(defaultCulture) ?? categoryContent.Name(defaultCulture);
+                            contentUrl = BuildUrlWithCategory(content, categoryUrlSegment, defaultCulture);
+                            _logger.LogInformation("[DEBUG AddUrl] FAQ page with category: {PageName} (ID: {PageId}), Category: {Category}, URL: {Url}", 
+                                content.Name, content.Id, categoryUrlSegment, contentUrl);
+                        }
                     }
                     else
                     {
@@ -848,10 +868,15 @@ namespace Morpara.Controllers
                     if (string.IsNullOrWhiteSpace(altUrl) || altUrl.Contains("#"))
                         continue;
                     
-                    // Kategori varsa alternatif URL'yi de oluştur
-                    if (!string.IsNullOrEmpty(categoryName) && HasQuestionsContent(content))
+                    // Kategori varsa alternatif URL'yi de oluştur (culture'a göre category URL'i al)
+                    if (categoryId.HasValue && HasQuestionsContent(content))
                     {
-                        altUrl = BuildUrlWithCategory(content, categoryName, altCultureCode);
+                        var catContent = _umbracoContextAccessor.GetRequiredUmbracoContext().Content?.GetById(categoryId.Value);
+                        if (catContent != null)
+                        {
+                            var altCategoryUrlSegment = catContent.UrlSegment(altCultureCode) ?? catContent.Name(altCultureCode);
+                            altUrl = BuildUrlWithCategory(content, altCategoryUrlSegment, altCultureCode);
+                        }
                     }
                     
                     var altFullUrl = baseUrl + altUrl;
@@ -876,15 +901,21 @@ namespace Morpara.Controllers
                 var alternativeCultures = new Dictionary<string, object>();
 
                 // Kategori bilgisini block grid'den çıkar (questionsContent varsa)
-                string? categoryName = null;
+                int? categoryId = null;
+                string? categoryUrlSegment = null;
                 if (content.ContentType.Alias == "page" && HasQuestionsContent(content))
                 {
-                    categoryName = ExtractCategoryFromBlockGrid(content);
+                    categoryId = ExtractCategoryIdFromBlockGrid(content);
                     
                     // Eğer kategori bulunduysa URL'yi yeniden oluştur
-                    if (!string.IsNullOrEmpty(categoryName))
+                    if (categoryId.HasValue)
                     {
-                        contentUrl = BuildUrlWithCategory(content, categoryName, culture);
+                        var categoryContent = _umbracoContextAccessor.GetRequiredUmbracoContext().Content?.GetById(categoryId.Value);
+                        if (categoryContent != null)
+                        {
+                            categoryUrlSegment = categoryContent.UrlSegment(culture) ?? categoryContent.Name(culture);
+                            contentUrl = BuildUrlWithCategory(content, categoryUrlSegment, culture);
+                        }
                     }
                 }
 
@@ -893,10 +924,15 @@ namespace Morpara.Controllers
                 {
                     var cultureUrl = content.Url(cultureInfo.Key);
                     
-                    // Block grid'de questionsContent varsa kategori ekle
-                    if (!string.IsNullOrEmpty(categoryName) && HasQuestionsContent(content))
+                    // Block grid'de questionsContent varsa kategori ekle (her culture için)
+                    if (categoryId.HasValue && HasQuestionsContent(content))
                     {
-                        cultureUrl = BuildUrlWithCategory(content, categoryName, cultureInfo.Key);
+                        var catContent = _umbracoContextAccessor.GetRequiredUmbracoContext().Content?.GetById(categoryId.Value);
+                        if (catContent != null)
+                        {
+                            var altCategoryUrlSegment = catContent.UrlSegment(cultureInfo.Key) ?? catContent.Name(cultureInfo.Key);
+                            cultureUrl = BuildUrlWithCategory(content, altCategoryUrlSegment, cultureInfo.Key);
+                        }
                     }
                     
                     alternativeCultures[cultureInfo.Key] = new
@@ -906,12 +942,17 @@ namespace Morpara.Controllers
                 }
 
                 // Eğer sadece Türkçe var ve FAQ sayfasıysa, İngilizce varsayılan URL oluştur
-                if (!alternativeCultures.ContainsKey("en") && HasQuestionsContent(content))
+                if (!alternativeCultures.ContainsKey("en") && HasQuestionsContent(content) && categoryId.HasValue)
                 {
-                    var englishUrl = BuildDefaultEnglishUrl(content, categoryName);
-                    if (!string.IsNullOrEmpty(englishUrl))
+                    var catContent = _umbracoContextAccessor.GetRequiredUmbracoContext().Content?.GetById(categoryId.Value);
+                    if (catContent != null)
                     {
-                        alternativeCultures["en"] = new { path = englishUrl };
+                        var enCategoryUrlSegment = catContent.UrlSegment("en") ?? catContent.Name("en");
+                        var englishUrl = BuildDefaultEnglishUrl(content, enCategoryUrlSegment);
+                        if (!string.IsNullOrEmpty(englishUrl))
+                        {
+                            alternativeCultures["en"] = new { path = englishUrl };
+                        }
                     }
                 }
 
@@ -935,7 +976,7 @@ namespace Morpara.Controllers
                     route = contentUrl,
                     url = contentUrl,
                     contentType = content.ContentType.Alias,
-                    category = categoryName,
+                    category = categoryUrlSegment,
                     alternativeCultures = alternativeCultures,
                     properties = properties
                 };
@@ -958,7 +999,7 @@ namespace Morpara.Controllers
             }
         }
 
-        private string? ExtractCategoryFromBlockGrid(IPublishedContent content)
+        private int? ExtractCategoryIdFromBlockGrid(IPublishedContent content)
         {
             try
             {
@@ -983,15 +1024,10 @@ namespace Morpara.Controllers
                             var firstCategory = categories.First();
                             _logger.LogInformation("[DEBUG ContentApiController] First category found in block: {CategoryName} (ID: {CategoryId})", firstCategory.Name, firstCategory.Id);
                             
-                            // Kategori content'inin gerçek adını al
-                            var categoryName = firstCategory.Name;
-                            _logger.LogInformation("[DEBUG ContentApiController] Category name: {CategoryName}", categoryName);
+                            // Category ID'yi döndür (her culture kendi URL segment'ini alacak)
+                            _logger.LogInformation("[DEBUG ContentApiController] Category ID: {CategoryId}", firstCategory.Id);
                             
-                            // URL segment'ini döndür (kategori alias'ı)
-                            var categoryUrlSegment = firstCategory.UrlSegment ?? categoryName;
-                            _logger.LogInformation("[DEBUG ContentApiController] Normalized category: {NormalizedCategory}", categoryUrlSegment);
-                            
-                            return categoryUrlSegment;
+                            return firstCategory.Id;
                         }
                     }
                 }

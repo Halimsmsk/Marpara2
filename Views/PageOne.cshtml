@@ -4,20 +4,63 @@
 @{
     Layout = null;
     
-    // Query string'den culture al, yoksa varsayılan culture kullan
+    // Browser'dan gelen gerçek URL'yi al
+    var requestPath = Context.Request.Path.Value ?? "/";
+    var requestedUrl = requestPath.TrimStart('/');
+    
+    // URL'den culture'ı algıla (örn: /en/international-money-transfer/ → en-US)
+    string detectedCulture = null;
+    if (requestedUrl.StartsWith("en/", StringComparison.OrdinalIgnoreCase) || requestedUrl == "en")
+    {
+        detectedCulture = "en-US";
+    }
+    else if (requestedUrl.StartsWith("tr/", StringComparison.OrdinalIgnoreCase) || requestedUrl == "tr")
+    {
+        detectedCulture = "tr-TR";
+    }
+    
+    // Query string'den culture al (backoffice için)
     var requestedCulture = Context.Request.Query["culture"].ToString();
     
-    // Eğer query string'de culture varsa onu kullan, yoksa content'in varsayılan culture'ını al
+    // Culture öncelik sırası: query string > URL'den algılanan > content default > tr-TR
     var culture = !string.IsNullOrEmpty(requestedCulture) 
         ? requestedCulture 
-        : (Umbraco.AssignedContentItem.Cultures.Keys.FirstOrDefault() ?? "tr-TR");
+        : (!string.IsNullOrEmpty(detectedCulture)
+            ? detectedCulture
+            : (Umbraco.AssignedContentItem.Cultures.Keys.FirstOrDefault() ?? "tr-TR"));
     
     // Culture'a göre sadece path'i al (domain olmadan)
     var urlPath = Umbraco.AssignedContentItem.Url(culture, mode: UrlMode.Relative);
     
+    // Eğer URL # veya boş ise, manuel URL oluştur
+    if (string.IsNullOrEmpty(urlPath) || urlPath == "#")
+    {
+        // Content'in o culture'daki URL segment'ini al
+        var urlSegment = Umbraco.AssignedContentItem.Value<string>("umbracoUrlName", culture) 
+                         ?? Umbraco.AssignedContentItem.Name(culture)?.ToLowerInvariant().Replace(" ", "-");
+        
+        if (!string.IsNullOrEmpty(urlSegment))
+        {
+            // Culture prefix'i ile manuel URL oluştur
+            var culturePrefix = culture == "en-US" ? "en" : "tr";
+            urlPath = $"/{culturePrefix}/{urlSegment}/";
+        }
+        else
+        {
+            // Fallback: orijinal request path'i kullan
+            urlPath = requestPath;
+        }
+    }
+    
     // Sabit domain kullan
     var baseUrl = "https://testalpha.morpara.com";
     var fullUrl = baseUrl + urlPath;
+    
+    // Debug bilgileri
+    var debugInfo = $"RequestPath: {requestPath} | DetectedCulture: {detectedCulture ?? "null"} | QueryCulture: {requestedCulture} | FinalCulture: {culture} | UrlPath: {urlPath}";
 }
-<h1 style="text-align: center; position: fixed;">Önizleme Sayfası Gösterilen: @fullUrl (Dil: @culture)</h1>
-<iframe src="@(fullUrl)?preview" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>
+<div style="background: #f0f0f0; padding: 10px; position: fixed; top: 0; left: 0; right: 0; z-index: 9999; font-size: 12px;">
+    <strong>DEBUG:</strong> @debugInfo<br/>
+    <strong>Önizleme:</strong> @fullUrl
+</div>
+<iframe src="@(fullUrl)?preview" width="100%" height="100%" frameborder="0" allowfullscreen style="margin-top: 60px;"></iframe>
