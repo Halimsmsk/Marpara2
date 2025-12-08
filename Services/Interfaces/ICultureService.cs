@@ -7,8 +7,9 @@ namespace Morpara.Services.Interfaces
         /// <summary>
         /// Gets alternative culture URLs for a content item by ID
         /// </summary>
-        /// <param name="categoryId">Optional category ID to append culture-specific URL segment</param>
-        Dictionary<string, object> GetAlternativeCulturesById(int contentId, int? categoryId = null);
+        /// <param name="categoryName">Optional category URL segment to append to URLs</param>
+        /// <param name="activeContentId">Optional active content URL name to append to URLs (for detail pages)</param>
+        Dictionary<string, object> GetAlternativeCulturesById(int contentId, string? categoryName = null, string? activeContentId = null);
 
         /// <summary>
         /// Gets all available languages
