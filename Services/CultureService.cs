@@ -3,6 +3,7 @@ using Umbraco.Cms.Core.Models.PublishedContent;
 using Umbraco.Cms.Core.Services;
 using Umbraco.Cms.Core.Web;
 using Umbraco.Extensions;
+using Microsoft.Extensions.Logging;
 
 namespace Morpara.Services
 {
@@ -11,20 +12,25 @@ namespace Morpara.Services
         private readonly IUmbracoContextAccessor _ctxAccessor;
         private readonly ILanguageService _languageService;
         private readonly IVariationContextAccessor _variation;
+        private readonly ILogger<MorparaCultureService> _logger;
 
         public MorparaCultureService(
             IUmbracoContextAccessor ctxAccessor,
             ILanguageService languageService,
-            IVariationContextAccessor variation)
+            IVariationContextAccessor variation,
+            ILogger<MorparaCultureService> logger)
         {
             _ctxAccessor = ctxAccessor;
             _languageService = languageService;
             _variation = variation;
+            _logger = logger;
+            _languageService = languageService;
+            _variation = variation;
         }
 
-        public Dictionary<string, object> GetAlternativeCulturesById(int contentId, int? categoryId = null)
-        {
-            var result = new Dictionary<string, object>();
+    public Dictionary<string, object> GetAlternativeCulturesById(int contentId, string? categoryName = null, string? activeContentId = null)
+    {
+        _logger.LogInformation("[DEBUG GetAltCultures] Called with contentId: {ContentId}, categoryName: {CategoryName}, activeContentId: {ActiveContentId}", contentId, categoryName, activeContentId);            var result = new Dictionary<string, object>();
             if (!_ctxAccessor.TryGetUmbracoContext(out var ctx))
                 return result;
 
@@ -116,18 +122,65 @@ namespace Morpara.Services
 
                 if (cultureContent != null)
                 {
-                    // Eğer category varsa culture'a göre URL'sini ekle
-                    if (categoryId.HasValue && !string.IsNullOrEmpty(finalUrl) && finalUrl != "#")
+                    // Eğer category name varsa URL'e ekle
+                    if (!string.IsNullOrEmpty(categoryName) && !string.IsNullOrEmpty(finalUrl) && finalUrl != "#")
                     {
-                        var categoryContent = ctx.Content?.GetById(categoryId.Value);
-                        if (categoryContent != null)
+                        _logger.LogInformation("[DEBUG GetAltCultures] Processing category '{CategoryName}' for culture: {Culture}", categoryName, isoCode);
+                        
+                        // categoryName'i kullanarak o culture'daki category'yi bul
+                        var categoryInCulture = ctx.Content?.GetAtRoot()
+                            .SelectMany(root => root.DescendantsOfType("category"))
+                            .FirstOrDefault(cat => cat.UrlSegment(isoCode) == categoryName || 
+                                                   cat.UrlSegment() == categoryName ||
+                                                   cat.Name(isoCode)?.ToLowerInvariant() == categoryName.ToLowerInvariant());
+                        
+                        if (categoryInCulture != null)
                         {
-                            // Her culture için category'nin kendi UrlSegment'ini al
-                            var categoryUrlSegment = categoryContent.UrlSegment(isoCode) ?? categoryContent.Name(isoCode);
+                            var categoryUrlSegment = categoryInCulture.UrlSegment(isoCode) ?? categoryInCulture.Name(isoCode);
+                            _logger.LogInformation("[DEBUG GetAltCultures] Category UrlSegment for {Culture}: {Segment}", isoCode, categoryUrlSegment);
+                            
                             if (!string.IsNullOrEmpty(categoryUrlSegment))
                             {
                                 finalUrl = finalUrl.TrimEnd('/') + "/" + categoryUrlSegment + "/";
+                                _logger.LogInformation("[DEBUG GetAltCultures] Final URL with category for {Culture}: {Url}", isoCode, finalUrl);
                             }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("[DEBUG GetAltCultures] Category not found with name: {CategoryName} for culture: {Culture}", categoryName, isoCode);
+                        }
+                    }
+                    else
+                    {
+                        _logger.LogInformation("[DEBUG GetAltCultures] Skipping category - categoryName: {CategoryName}, finalUrl: {Url}", categoryName, finalUrl);
+                    }
+                    
+                    // Eğer activeContentId varsa URL'ye ekle (detay sayfası)
+                    if (!string.IsNullOrEmpty(activeContentId) && !string.IsNullOrEmpty(finalUrl) && finalUrl != "#")
+                    {
+                        _logger.LogInformation("[DEBUG GetAltCultures] Processing activeContentId '{ActiveContentId}' for culture: {Culture}", activeContentId, isoCode);
+                        
+                        // activeContentId'yi kullanarak o culture'daki içeriği bul
+                        var activeContent = ctx.Content?.GetAtRoot()
+                            .SelectMany(root => root.DescendantsOrSelf())
+                            .FirstOrDefault(c => c.UrlSegment(isoCode) == activeContentId || 
+                                                 c.UrlSegment() == activeContentId ||
+                                                 c.Name(isoCode)?.ToLowerInvariant() == activeContentId.ToLowerInvariant());
+                        
+                        if (activeContent != null)
+                        {
+                            var activeContentUrlSegment = activeContent.UrlSegment(isoCode) ?? activeContent.Name(isoCode);
+                            _logger.LogInformation("[DEBUG GetAltCultures] ActiveContent UrlSegment for {Culture}: {Segment}", isoCode, activeContentUrlSegment);
+                            
+                            if (!string.IsNullOrEmpty(activeContentUrlSegment))
+                            {
+                                finalUrl = finalUrl.TrimEnd('/') + "/" + activeContentUrlSegment + "/";
+                                _logger.LogInformation("[DEBUG GetAltCultures] Final URL with activeContent for {Culture}: {Url}", isoCode, finalUrl);
+                            }
+                        }
+                        else
+                        {
+                            _logger.LogWarning("[DEBUG GetAltCultures] ActiveContent not found with id: {ActiveContentId} for culture: {Culture}", activeContentId, isoCode);
                         }
                     }
                     

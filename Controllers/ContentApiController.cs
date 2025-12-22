@@ -494,12 +494,46 @@ namespace Morpara.Controllers
                 // Kategori bilgisini al
                 var categoryInfo = _categoryService.GetCategoryInfo(content, categoryName);
                 
-                // Category ID'yi categoryName'den hesapla (alternative cultures için)
-                int? categoryId = null;
-                if (!string.IsNullOrEmpty(categoryName) && categoryInfo != null)
+                // Eğer categoryName URL'den gelmemişse, filterParams'dan al
+                string? effectiveCategoryName = categoryName;
+                string? effectiveActiveContentId = null;
+                
+                if (filterParams != null)
                 {
-                    // categoryInfo'dan ID al veya categoryName ile arama yap
-                    categoryId = ExtractCategoryIdFromBlockGrid(content);
+                    // Category'yi al
+                    if (string.IsNullOrEmpty(effectiveCategoryName))
+                    {
+                        // Önce questionsPage'den dene
+                        if (filterParams.TryGetValue("questionsPage", out var questionsPageParams) &&
+                            questionsPageParams.TryGetValue("categories", out var qpCategory))
+                        {
+                            effectiveCategoryName = qpCategory;
+                            _logger.LogInformation("[DEBUG ByUrl] Got category from questionsPage filterParams: {Category}", effectiveCategoryName);
+                        }
+                        // Sonra wildcard:questionsContent'den dene
+                        else if (filterParams.TryGetValue("wildcard:questionsContent", out var wildcardParams) &&
+                                 wildcardParams.TryGetValue("categories", out var wcCategory))
+                        {
+                            effectiveCategoryName = wcCategory;
+                            _logger.LogInformation("[DEBUG ByUrl] Got category from wildcard:questionsContent filterParams: {Category}", effectiveCategoryName);
+                        }
+                    }
+                    
+                    // ActiveContentId'yi al (detay sayfası)
+                    // Önce questionsPage'den dene
+                    if (filterParams.TryGetValue("questionsPage", out var qpParams) &&
+                        qpParams.TryGetValue("activeContentId", out var qpActiveContent))
+                    {
+                        effectiveActiveContentId = qpActiveContent;
+                        _logger.LogInformation("[DEBUG ByUrl] Got activeContentId from questionsPage filterParams: {ActiveContentId}", effectiveActiveContentId);
+                    }
+                    // Sonra wildcard:questionsContent'den dene
+                    else if (filterParams.TryGetValue("wildcard:questionsContent", out var wcParams) &&
+                             wcParams.TryGetValue("activeContentId", out var wcActiveContent))
+                    {
+                        effectiveActiveContentId = wcActiveContent;
+                        _logger.LogInformation("[DEBUG ByUrl] Got activeContentId from wildcard:questionsContent filterParams: {ActiveContentId}", effectiveActiveContentId);
+                    }
                 }
 
                 // Handle category content type
@@ -538,7 +572,7 @@ namespace Morpara.Controllers
                     Category = categoryInfo,
                     ParentUrl = content.Parent()?.Url(activeCulture),
                     FilterParams = filterParams,
-                    AlternativeCultures = _cultureService.GetAlternativeCulturesById(content.Id, categoryId),
+                    AlternativeCultures = _cultureService.GetAlternativeCulturesById(content.Id, effectiveCategoryName, effectiveActiveContentId),
                     Properties = content.Properties.ToDictionary(
                         p => p.Alias,
                         p => _propertyMappingService.MapValue(p, content.Id, content.Key, filterParams, url, categoryName))
