@@ -613,7 +613,7 @@ namespace Morpara.Controllers
                 if (request.TemplateId == 0 && !string.IsNullOrWhiteSpace(request.TemplateKey))
                 {
                     var templateForId = _contentService.GetById(Guid.Parse(request.TemplateKey));
-                    if (templateForId != null)
+                    if (templateForId != null)// ✅ TemplateId yüklendi
                     {
                         request.TemplateId = templateForId.Id;
                         _logger.LogInformation("[CopyPageFromJson] TemplateId loaded from TemplateKey: {TemplateId}", request.TemplateId);
