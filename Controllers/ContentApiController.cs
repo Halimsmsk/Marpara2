@@ -287,10 +287,32 @@ namespace Morpara.Controllers
         public IActionResult ByUrl(string? url, bool? preview = false, string culture = "tr-TR", string? filter = null)
         {
             var activeCulture = culture ?? "tr-TR";
+            
+            // ✅ FIX: URL'den culture prefix'ini detect et ve activeCulture'u güncelle
+            var normalized = (url ?? "/").Trim('/');
+            var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            
+            if (segments.Length > 0)
+            {
+                var firstSegment = segments[0].ToLower();
+                
+                // İngilizce culture prefix kontrolü (en, en-us, en-gb vb.)
+                if (firstSegment == "en" || firstSegment.StartsWith("en-"))
+                {
+                    _logger.LogInformation("[DEBUG ByUrl] Detected EN culture prefix in URL: {FirstSegment}, setting culture to 'en'", firstSegment);
+                    activeCulture = "en";
+                }
+                // Türkçe culture prefix kontrolü
+                else if (firstSegment == "tr" || firstSegment.StartsWith("tr-"))
+                {
+                    _logger.LogInformation("[DEBUG ByUrl] Detected TR culture prefix in URL: {FirstSegment}, setting culture to 'tr-TR'", firstSegment);
+                    activeCulture = "tr-TR";
+                }
+            }
+            
             _variation.VariationContext = new VariationContext(activeCulture);
 
             // URL'yi normalize et - exactly like original
-            var normalized = (url ?? "/").Trim('/');
             var route = string.IsNullOrEmpty(normalized) ? "/" : "/" + normalized;
 
             var filterParams = _propertyMappingService.ParseFilterParameters(filter ?? string.Empty);
@@ -489,6 +511,66 @@ namespace Morpara.Controllers
                     var baseUrl = parentContent?.Url(activeCulture).TrimEnd('/') ?? string.Empty;
                     var contentSlug = _categoryService.ExtractSlugFromUrl(content.Url(activeCulture));
                     contentUrl = $"{baseUrl}/{categoryName}/{contentSlug}/";
+                }
+
+                // ✅ URL validation: originalUrl ile contentUrl farklıysa 404 dön
+                // Kategori URL'de belirtilmiş ama içerikte yok ise, üst sayfayı döndürme
+                var normalizedOriginalUrl = ("/" + (url ?? "").Trim('/')).TrimEnd('/') + "/";
+                var normalizedContentUrl = contentUrl.TrimEnd('/') + "/";
+                
+                // ✅ FIX: Culture prefix'lerini kaldırarak normalize et
+                // URL'leri karşılaştırmadan önce culture prefix'lerini çıkar (/en/virtual-pos/ -> /virtual-pos/)
+                var urlWithoutCulture = normalizedOriginalUrl;
+                var contentUrlWithoutCulture = normalizedContentUrl;
+                
+                // Remove culture prefix from original URL (if exists)
+                foreach (var culturePrefix in new[] { "/en/", "/tr/", "/tr-tr/" })
+                {
+                    if (urlWithoutCulture.StartsWith(culturePrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        urlWithoutCulture = "/" + urlWithoutCulture.Substring(culturePrefix.Length);
+                        break;
+                    }
+                }
+                
+                // Remove culture prefix from content URL (if exists)
+                foreach (var culturePrefix in new[] { "/en/", "/tr/", "/tr-tr/" })
+                {
+                    if (contentUrlWithoutCulture.StartsWith(culturePrefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        contentUrlWithoutCulture = "/" + contentUrlWithoutCulture.Substring(culturePrefix.Length);
+                        break;
+                    }
+                }
+                
+                // ✅ FIX: Root URL ("/") için home page match'ini kabul et
+                bool isRootRequest = urlWithoutCulture == "/";
+                bool isHomePage = content.Level == 1;
+                
+                // ✅ FIX: Kategori bazlı URL ise (categoryName varsa), URL mismatch kabul edilebilir
+                bool isCategoryBasedUrl = !string.IsNullOrEmpty(categoryName);
+                
+                if (!string.Equals(urlWithoutCulture, contentUrlWithoutCulture, StringComparison.OrdinalIgnoreCase))
+                {
+                    // Root request ve home page ise, mismatch'i ignore et
+                    if (isRootRequest && isHomePage)
+                    {
+                        _logger.LogInformation("[DEBUG ByUrl] Root URL request matched home page - OriginalUrl: {OriginalUrl} (without culture: {UrlWithoutCulture}), ContentUrl: {ContentUrl} (without culture: {ContentUrlWithoutCulture}). Accepting match.", 
+                            normalizedOriginalUrl, urlWithoutCulture, normalizedContentUrl, contentUrlWithoutCulture);
+                    }
+                    // Kategori bazlı URL ise (örn: /sikca-sorulan-sorular/yurt-disi-para-transferi/)
+                    // İçerik /sikca-sorulan-sorular/ olabilir, bu normaldir
+                    else if (isCategoryBasedUrl)
+                    {
+                        _logger.LogInformation("[DEBUG ByUrl] Category-based URL detected - OriginalUrl: {OriginalUrl}, ContentUrl: {ContentUrl}, Category: {CategoryName}. Accepting match.", 
+                            normalizedOriginalUrl, normalizedContentUrl, categoryName);
+                    }
+                    else
+                    {
+                        _logger.LogWarning("[DEBUG ByUrl] URL mismatch - OriginalUrl: {OriginalUrl} (without culture: {UrlWithoutCulture}), ContentUrl: {ContentUrl} (without culture: {ContentUrlWithoutCulture}). Returning 404.", 
+                            normalizedOriginalUrl, urlWithoutCulture, normalizedContentUrl, contentUrlWithoutCulture);
+                        return NotFound($"İçerik bulunamadı. İstenen URL: {normalizedOriginalUrl}, Bulunan: {normalizedContentUrl}");
+                    }
                 }
 
                 // Kategori bilgisini al

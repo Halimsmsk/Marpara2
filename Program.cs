@@ -18,7 +18,7 @@ builder.CreateUmbracoBuilder()
     .AddBackOffice()
     .AddWebsite()
     .AddDeliveryApi()
-    .AddComposers() // Bu composer'ları otomatik olarak keşfeder ve yükler
+    .AddComposers() // Bu composer'ları otomatik olarak keşfeder ve yükler (TurkishUrlSegmentProviderComposer dahil)
     .Build();
 
 // ⚡ NoOpDocumentUrlService REMOVED: URL'lerin düzgün gelmesi için gerçek DocumentUrlService kullanılıyor

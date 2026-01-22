@@ -101,7 +101,54 @@ namespace Morpara.Services
 
             // URL'yi normalize et
             var normalized = (url ?? "/").Trim('/');
+            
+            // ✅ FIX: URL'den culture prefix'ini çıkar (örn: /en/faq/ -> /faq/)
+            var segments = normalized.Split('/', StringSplitOptions.RemoveEmptyEntries);
+            if (segments.Length > 0)
+            {
+                var firstSegment = segments[0].ToLower();
+                // İngilizce culture prefix kontrolü (en, en-us, en-gb vb.)
+                if (firstSegment == "en" || firstSegment.StartsWith("en-"))
+                {
+                    _logger.LogInformation("[GetContentByUrl] Detected EN culture prefix in URL: {FirstSegment}, removing it", firstSegment);
+                    
+                    // "en" culture olarak ayarla (parametre ne olursa olsun)
+                    culture = "en";
+                    _variation.VariationContext = new VariationContext(culture);
+                    
+                    // URL'den "en" prefix'ini çıkar
+                    if (segments.Length == 1)
+                    {
+                        // Sadece "/en" ise root'a yönlendir
+                        normalized = "";
+                    }
+                    else
+                    {
+                        // /en/something -> /something
+                        normalized = string.Join("/", segments.Skip(1));
+                    }
+                }
+                // Türkçe culture prefix kontrolü (isteğe bağlı)
+                else if (firstSegment == "tr" || firstSegment.StartsWith("tr-"))
+                {
+                    _logger.LogInformation("[GetContentByUrl] Detected TR culture prefix in URL: {FirstSegment}, removing it", firstSegment);
+                    culture = "tr-TR";
+                    _variation.VariationContext = new VariationContext(culture);
+                    
+                    if (segments.Length == 1)
+                    {
+                        normalized = "";
+                    }
+                    else
+                    {
+                        normalized = string.Join("/", segments.Skip(1));
+                    }
+                }
+            }
+            
             var route = string.IsNullOrEmpty(normalized) ? "/" : "/" + normalized;
+            _logger.LogInformation("[GetContentByUrl] Processing URL - Original: {OriginalUrl}, Normalized: {Normalized}, Route: {Route}, Culture: {Culture}", 
+                url, normalized, route, culture);
 
             IPublishedContent content = null;
             string categoryName = null;
@@ -171,6 +218,26 @@ namespace Morpara.Services
                         content = ctx.Content.GetByRoute(preview, basePage, null, culture);
                         _logger.LogInformation("GetByRoute result for {BasePageUrl}: {ContentFound}", basePage, content != null ? $"Found: {content.Name}" : "Not found");
                     }
+                    
+                    // Hala bulunamadıysa, birinci segment ile UrlSegment/Name eşleşmesi ara
+                    if (content == null)
+                    {
+                        var firstSegment = segments[0];
+                        _logger.LogInformation("Searching by first segment (UrlSegment/Name): {FirstSegment}", firstSegment);
+                        
+                        content = ctx.Content.GetAtRoot(culture)
+                            .SelectMany(root => root.DescendantsOrSelf())
+                            .FirstOrDefault(c =>
+                            {
+                                if (!c.HasCulture(culture))
+                                    return false;
+                                
+                                var urlSegment = c.UrlSegment(culture) ?? c.Name(culture)?.ToLowerInvariant().Replace(" ", "-");
+                                return string.Equals(urlSegment, firstSegment, StringComparison.OrdinalIgnoreCase);
+                            });
+                        
+                        _logger.LogInformation("Search by segment result: {ContentFound}", content != null ? $"Found: {content.Name} (ID: {content.Id})" : "Not found");
+                    }
                 }
                 else if (segments.Length >= 3)
                 {
@@ -190,6 +257,26 @@ namespace Morpara.Services
                     {
                         content = ctx.Content.GetByRoute(preview, withoutCategory, null, culture);
                         _logger.LogInformation("GetByRoute result for {WithoutCategoryUrl}: {ContentFound}", withoutCategory, content != null ? $"Found: {content.Name}" : "Not found");
+                    }
+                    
+                    // Hala bulunamadıysa, son segment ile UrlSegment/Name eşleşmesi ara
+                    if (content == null)
+                    {
+                        var lastSegment = segments[segments.Length - 1];
+                        _logger.LogInformation("Searching by last segment (UrlSegment/Name): {LastSegment}", lastSegment);
+                        
+                        content = ctx.Content.GetAtRoot(culture)
+                            .SelectMany(root => root.DescendantsOrSelf())
+                            .FirstOrDefault(c =>
+                            {
+                                if (!c.HasCulture(culture))
+                                    return false;
+                                
+                                var urlSegment = c.UrlSegment(culture) ?? c.Name(culture)?.ToLowerInvariant().Replace(" ", "-");
+                                return string.Equals(urlSegment, lastSegment, StringComparison.OrdinalIgnoreCase);
+                            });
+                        
+                        _logger.LogInformation("Search by last segment result: {ContentFound}", content != null ? $"Found: {content.Name} (ID: {content.Id})" : "Not found");
                     }
                 }
             }
