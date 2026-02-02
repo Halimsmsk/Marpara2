@@ -92,6 +92,50 @@ namespace Morpara.Services
                     title = c.Value<string>("title")
                 }).ToList();
 
+            // Check if the provided category is valid (exists in the defined categories)
+            if (!string.IsNullOrEmpty(category))
+            {
+                var validCategories = categories?.Select(c => c.title).ToList() ?? new List<string>();
+                var isCategoryValid = validCategories.Any(c => c.Equals(category, StringComparison.OrdinalIgnoreCase));
+                
+                _logger.LogInformation("[DEBUG] Category validation: '{Category}' valid={IsValid}, Available categories: {Categories}", 
+                    category, isCategoryValid, string.Join(", ", validCategories));
+                
+                if (!isCategoryValid)
+                {
+                    _logger.LogWarning("[DEBUG] Invalid category '{Category}' provided - returning invalid category marker", category);
+                    return new
+                    {
+                        contentType = "campingList",
+                        isValidCategory = false,
+                        invalidCategory = category,
+                        content = new
+                        {
+                            contentTypeAlias = "campingList",
+                            title = campingListBlock?.Content?.Value<string>("title") ?? "Kampanyalar",
+                            titleSize = campingListBlock?.Content?.Value<string>("titleSize") ?? "h1",
+                            categoriesActive = categoriesActive,
+                            categories = categories,
+                            allCategoriesTitle = allCategoriesTitle,
+                            campingPageSize = campingPageSize,
+                            campaignsType = campaignTypeToUse,
+                            campingsOrder = campingsOrder,
+                            detailButtonText = detailButtonText,
+                            loadMore = loadMore,
+                            notFoundCamping = notFoundCamping
+                        },
+                        pagination = new
+                        {
+                            currentPage = page,
+                            pageSize = campingPageSize,
+                            totalItems = 0,
+                            totalPages = 0
+                        },
+                        campaigns = new List<object>()
+                    };
+                }
+            }
+
             // Get children of the parent that have campaign blocks
             var allChildren = parent.Children().ToList();
             _logger.LogInformation("[DEBUG] Parent has {ChildCount} children", allChildren.Count);

@@ -330,12 +330,13 @@ namespace Morpara.Controllers
                 if (content.ContentType.Alias != "page")
                     return NotFound($"Page içeriği bulunamadı → Url:{url} | ContentType:{content.ContentType.Alias}");
 
-                // Manual filtering for questionsContent pages (category and search parameters)
+                // Manual filtering for questionsContent and campingList pages (category and search parameters)
                 if (content.ContentType.Alias == "page")
                 {
-                    // Check if this page has questionsContent or questionsPage blocks
+                    // Check if this page has questionsContent, questionsPage, or campingList blocks
                     var homeProperty = content.GetProperty("home");
                     var hasQuestionsContent = false;
+                    var hasCampingList = false;
                     
                     if (homeProperty != null && homeProperty.HasValue())
                     {
@@ -345,6 +346,9 @@ namespace Morpara.Controllers
                             hasQuestionsContent = blockGrid.Any(b => 
                                 b.Content?.ContentType?.Alias == "questionsContent" || 
                                 b.Content?.ContentType?.Alias == "questionsPage");
+                            
+                            hasCampingList = blockGrid.Any(b => 
+                                b.Content?.ContentType?.Alias == "campingList");
                         }
                     }
                     
@@ -496,6 +500,42 @@ namespace Morpara.Controllers
                             }
                         }
                     }
+                    
+                    // ✨ YENİ: campingList bloğu varsa, kategori filtresini ekle
+                    if (hasCampingList && !string.IsNullOrEmpty(categoryName))
+                    {
+                        _logger.LogInformation("[DEBUG ContentApiController] Page has campingList, adding category filter for '{CategoryName}'", categoryName);
+                        
+                        // Ensure filterParams exists
+                        if (filterParams == null)
+                        {
+                            filterParams = new Dictionary<string, Dictionary<string, string>>();
+                        }
+                        
+                        // Find all campingList blocks and add category filter to each
+                        if (homeProperty != null && homeProperty.HasValue())
+                        {
+                            var blockGrid = homeProperty.GetValue() as Umbraco.Cms.Core.Models.Blocks.BlockGridModel;
+                            if (blockGrid != null)
+                            {
+                                int blockIndex = 0;
+                                foreach (var block in blockGrid.Where(b => b.Content?.ContentType?.Alias == "campingList"))
+                                {
+                                    var componentId = $"campingList{{{content.Id}}}-{blockIndex}";
+                                    
+                                    if (!filterParams.ContainsKey(componentId))
+                                    {
+                                        filterParams[componentId] = new Dictionary<string, string>();
+                                    }
+                                    
+                                    filterParams[componentId]["categories"] = categoryName;
+                                    _logger.LogInformation("[DEBUG ContentApiController] Added category filter to {ComponentId}: categories='{CategoryName}'", componentId, categoryName);
+                                    
+                                    blockIndex++;
+                                }
+                            }
+                        }
+                    }
                 }
 
                 var contentUrl = content.Url(activeCulture);
@@ -638,6 +678,73 @@ namespace Morpara.Controllers
                     return ByUrl(parentRelativePath, preview, activeCulture, filterString);
                 }
 
+                // Map properties
+                var properties = content.Properties.ToDictionary(
+                    p => p.Alias,
+                    p => _propertyMappingService.MapValue(p, content.Id, content.Key, filterParams, url, categoryName));
+
+                // Check for invalid category in campaign or question blocks
+                if (properties.ContainsKey("home") && properties["home"] is IEnumerable<object> homeBlocks)
+                {
+                    foreach (var block in homeBlocks)
+                    {
+                        // Try to access Campaigns property
+                        try
+                        {
+                            var blockType = block.GetType();
+                            
+                            // Check Campaigns property (case-insensitive)
+                            var campaignsProp = blockType.GetProperty("Campaigns", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                            
+                            if (campaignsProp != null)
+                            {
+                                var campaigns = campaignsProp.GetValue(block);
+                                if (campaigns != null)
+                                {
+                                    var campaignsType = campaigns.GetType();
+                                    var isValidProp = campaignsType.GetProperty("isValidCategory", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                                    
+                                    if (isValidProp != null)
+                                    {
+                                        var isValid = isValidProp.GetValue(campaigns);
+                                        if (isValid is bool valid && !valid)
+                                        {
+                                            _logger.LogWarning("[DEBUG ContentApiController] Invalid category detected in campaigns block");
+                                            return NotFound($"İçerik bulunamadı → Url:{url} | Culture:{activeCulture} | Route:{route}");
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Try to access questions property (case-insensitive)
+                            var questionsProp = blockType.GetProperty("questions", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                            if (questionsProp != null)
+                            {
+                                var questions = questionsProp.GetValue(block);
+                                if (questions != null)
+                                {
+                                    var questionsType = questions.GetType();
+                                    var isValidProp = questionsType.GetProperty("isValidCategory", BindingFlags.Public | BindingFlags.Instance | BindingFlags.IgnoreCase);
+                                    
+                                    if (isValidProp != null)
+                                    {
+                                        var isValid = isValidProp.GetValue(questions);
+                                        if (isValid is bool valid && !valid)
+                                        {
+                                            _logger.LogWarning("[DEBUG ContentApiController] Invalid category detected in questions block");
+                                            return NotFound($"İçerik bulunamadı → Url:{url} | Culture:{activeCulture} | Route:{route}");
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogDebug("[DEBUG ContentApiController] Error checking block for invalid category: {Message}", ex.Message);
+                        }
+                    }
+                }
+
                 return Ok(new
                 {
                     Id = content.Id,
@@ -655,9 +762,7 @@ namespace Morpara.Controllers
                     ParentUrl = content.Parent()?.Url(activeCulture),
                     FilterParams = filterParams,
                     AlternativeCultures = _cultureService.GetAlternativeCulturesById(content.Id, effectiveCategoryName, effectiveActiveContentId),
-                    Properties = content.Properties.ToDictionary(
-                        p => p.Alias,
-                        p => _propertyMappingService.MapValue(p, content.Id, content.Key, filterParams, url, categoryName))
+                    Properties = properties
                 });
             }
             catch (Exception ex)

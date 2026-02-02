@@ -136,6 +136,45 @@ namespace Morpara.Services
                     };
                 }).ToList();
 
+            // Check if the provided category is valid (exists in the defined categories)
+            if (!string.IsNullOrEmpty(category) && category != allCategoriesText)
+            {
+                var validCategories = categories?.Select(c => c.title).ToList() ?? new List<string>();
+                var isCategoryValid = validCategories.Any(c => TextNormalizationHelper.AreCategoriesEqual(c, category));
+                
+                _logger.LogInformation("[DEBUG] Category validation: '{Category}' valid={IsValid}, Available categories: {Categories}", 
+                    category, isCategoryValid, string.Join(", ", validCategories));
+                
+                if (!isCategoryValid)
+                {
+                    _logger.LogWarning("[DEBUG] Invalid category '{Category}' provided - returning invalid category marker", category);
+                    return new
+                    {
+                        contentType = "questionsPage",
+                        isValidCategory = false,
+                        invalidCategory = category,
+                        content = new
+                        {
+                            contentTypeAlias = "questionsPage",
+                            categoriesActive = categoriesActive,
+                            categories = categories,
+                            allCategoriesText = allCategoriesText,
+                            questionsPageSize = questionsPageSize,
+                            questionsOrder = questionsOrder
+                        },
+                        questions = new List<object>(),
+                        pagination = new
+                        {
+                            currentPage = page,
+                            pageSize = questionsPageSize,
+                            totalItems = 0,
+                            totalPages = 0,
+                            hasActiveContent = false
+                        }
+                    };
+                }
+            }
+
             var contentItems = new List<IPublishedContent>();
 
             foreach (var child in parent.Children())
