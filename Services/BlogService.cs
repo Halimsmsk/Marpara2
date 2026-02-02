@@ -687,6 +687,7 @@ namespace Morpara.Services
                     var shortDescription = itemBlogBlock?.Content.Value<string>("shortDescription");
                     var blogDate = itemBlogBlock?.Content.Value<DateTime?>("blogDate") ?? item.CreateDate;
                     var coverImage = itemBlogBlock?.Content.Value<IPublishedContent>("blogCoverImage");
+                    var itemCategories = itemBlogBlock?.Content.Value<IEnumerable<IPublishedContent>>("categories");
 
                     return new
                     {
@@ -695,6 +696,11 @@ namespace Morpara.Services
                         image = coverImage?.Url(),
                         date = blogDate.ToString("dd.MM.yyyy HH:mm:ss"),
                         url = item.Url(culture),
+                        categories = itemCategories?.Select(cat => new
+                        {
+                            title = cat.Value<string>("title") ?? cat.Name,
+                            icon = cat.Value<IPublishedContent>("icon")?.Url()
+                        }).ToList()
                     };
                 })
                 .ToList();
